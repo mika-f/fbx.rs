@@ -1,0 +1,10 @@
+[package]
+edition = "2021"
+name = "fbx_debugger"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+fbx = {path = "../fbx"}
+fbx_reader = {path = "../fbx_reader"}

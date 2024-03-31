@@ -1,4 +1,7 @@
 [workspace]
 members = [
   "fbx",
+  "fbx_debugger",
+  "fbx_reader",
+  "fbx_writer",
 ]
