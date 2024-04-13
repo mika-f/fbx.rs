@@ -4,18 +4,24 @@ use std::io::{BufReader, Read};
 type Reader = BufReader<File>;
 
 pub struct BinaryReader {
-    reader: Reader,
+    reader: Box<dyn Read>,
+    cursor: usize,
 }
 
 impl BinaryReader {
-    pub(crate) fn new(reader: Reader) -> Self {
-        BinaryReader { reader }
+    pub(crate) fn new(reader: Box<dyn Read>, cursor: usize) -> Self {
+        BinaryReader { reader, cursor }
+    }
+
+    pub(crate) fn current_cursor(&mut self) -> usize {
+        self.cursor
     }
 
     pub(crate) fn read_bytes_exact(&mut self, len: usize) -> Vec<u8> {
         let mut bytes = vec![0; len];
         let _ = self.reader.read_exact(&mut bytes);
 
+        self.cursor = self.cursor + len;
         bytes
     }
 
@@ -49,6 +55,20 @@ impl BinaryReader {
         self.read_bytes_exact(1)[0]
     }
 
+    pub(crate) fn read_i16_be(&mut self) -> i16 {
+        let number = self.read_bytes_exact(2);
+        let bytes: [u8; 2] = number.try_into().unwrap();
+
+        i16::from_be_bytes(bytes)
+    }
+
+    pub(crate) fn read_i16_le(&mut self) -> i16 {
+        let number = self.read_bytes_exact(2);
+        let bytes: [u8; 2] = number.try_into().unwrap();
+
+        i16::from_le_bytes(bytes)
+    }
+
     pub(crate) fn read_u16_be(&mut self) -> u16 {
         let number = self.read_bytes_exact(2);
         let bytes: [u8; 2] = number.try_into().unwrap();
@@ -61,6 +81,20 @@ impl BinaryReader {
         let bytes: [u8; 2] = number.try_into().unwrap();
 
         u16::from_le_bytes(bytes)
+    }
+
+    pub(crate) fn read_i32_be(&mut self) -> i32 {
+        let number = self.read_bytes_exact(4);
+        let bytes: [u8; 4] = number.try_into().unwrap();
+
+        i32::from_be_bytes(bytes)
+    }
+
+    pub(crate) fn read_i32_le(&mut self) -> i32 {
+        let number = self.read_bytes_exact(4);
+        let bytes: [u8; 4] = number.try_into().unwrap();
+
+        i32::from_le_bytes(bytes)
     }
 
     pub(crate) fn read_u32_be(&mut self) -> u32 {
@@ -89,6 +123,20 @@ impl BinaryReader {
         let bytes: [u8; 8] = number.try_into().unwrap();
 
         u64::from_le_bytes(bytes)
+    }
+
+    pub(crate) fn read_i64_be(&mut self) -> i64 {
+        let number = self.read_bytes_exact(8);
+        let bytes: [u8; 8] = number.try_into().unwrap();
+
+        i64::from_be_bytes(bytes)
+    }
+
+    pub(crate) fn read_i64_le(&mut self) -> i64 {
+        let number = self.read_bytes_exact(8);
+        let bytes: [u8; 8] = number.try_into().unwrap();
+
+        i64::from_le_bytes(bytes)
     }
 
     pub(crate) fn read_f32_be(&mut self) -> f32 {

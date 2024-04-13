@@ -11,7 +11,8 @@ pub struct BinaryFBX {
 
 impl BinaryFBX {
     pub fn new(reader: BufReader<File>) -> Self {
-        BinaryFBX { reader: BinaryReader::new(reader), version: None }
+        BinaryFBX { reader: BinaryReader::new(Box::new(reader), 23), version: None }
+    }
     }
 
     fn read_version(&mut self) {
