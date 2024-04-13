@@ -10,3 +10,4 @@ version = "0.1.0"
 
 [dependencies]
 thiserror = "1.0.58"
+flate2 = "1.0"
