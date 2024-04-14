@@ -6,8 +6,8 @@ use crate::error::{ReadError, Result};
 use crate::format::{BaseFBXReader, Object};
 
 mod binary;
-mod format;
-mod error;
+pub mod format;
+pub mod error;
 
 
 const FBX_MAGIC_BINARY_BYTES: [u8; 23] = [
