@@ -1,6 +1,7 @@
 use std::{fmt::Debug, fs::File, io::BufReader};
 
-use crate::format::base;
+use crate::error::Result;
+use crate::format::{base, Object};
 
 pub struct AsciiFBX {
     reader: BufReader<File>,
@@ -12,8 +13,8 @@ impl AsciiFBX {
     }
 }
 
-impl base::BaseFBX for AsciiFBX {
-    fn read(&mut self) {
+impl base::BaseFBXReader for AsciiFBX {
+    fn read(&mut self) -> Result<Object> {
         todo!()
     }
 }

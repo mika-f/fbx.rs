@@ -5,8 +5,9 @@ use std::io::prelude::*;
 use flate2::read::GzDecoder;
 
 use crate::binary::BinaryReader;
-use crate::format::base::{BaseFBX, Node, Version};
-use crate::format::Type;
+use crate::error::{ReadError, Result};
+use crate::format::{BaseFBXReader, Object, Type};
+use crate::format::base::{Node, Version};
 use crate::format::Type::{Bool, Float32, Float64, Int16, Int32, Int64, String, VecBool, VecFloat32, VecFloat64, VecInt32, VecInt64, VecRaw};
 
 const FBX_FOOTER_MAGIC_BYTES_2: [u8; 4] = [
@@ -44,11 +45,11 @@ impl BinaryFBX {
     fn is_new_format(&self) -> bool {
         let boundary_version = Version::from(7, 5);
         let current_version = match self.version {
-            Some(v) => v,
-            None => panic!(), // invalid operation
+            Some(v) => Ok(v),
+            None => Err(ReadError::InvalidOperation),
         };
 
-        current_version >= boundary_version
+        current_version.unwrap() >= boundary_version
     }
 
     fn read_version(&mut self) -> Version {
@@ -74,7 +75,7 @@ impl BinaryFBX {
         } else if encoding == 1 {
             // zlib compressed
             let v = self.reader.read_bytes_exact(bytes_length as usize);
-            let mut decoder = GzDecoder::new(Cursor::new(v));
+            let decoder = GzDecoder::new(Cursor::new(v));
             let mut br = BinaryReader::new(Box::new(decoder), 0);
 
             for _ in times(length as usize) {
@@ -102,30 +103,31 @@ impl BinaryFBX {
             let mut attributes: Vec<Type> = vec![];
 
             for _ in times(attribute_length as usize) {
-                let t = match self.reader.read_char() {
-                    'C' => Bool(self.reader.read_boolean()),
-                    'Y' => Int16(self.reader.read_i16_le()),
-                    'I' => Int32(self.reader.read_i32_le()),
-                    'L' => Int64(self.reader.read_i64_le()),
-                    'F' => Float32(self.reader.read_f32_le()),
-                    'D' => Float64(self.reader.read_f64_le()),
-                    'b' => VecBool(self.read_vector(|w| w.read_boolean())),
-                    'i' => VecInt32(self.read_vector(|w| w.read_i32_le())),
-                    'l' => VecInt64(self.read_vector(|w| w.read_i64_le())),
-                    'f' => VecFloat32(self.read_vector(|w| w.read_f32_le())),
-                    'd' => VecFloat64(self.read_vector(|w| w.read_f64_le())),
+                let c = self.reader.read_char();
+                let t = match c {
+                    'C' => Ok(Bool(self.reader.read_boolean())),
+                    'Y' => Ok(Int16(self.reader.read_i16_le())),
+                    'I' => Ok(Int32(self.reader.read_i32_le())),
+                    'L' => Ok(Int64(self.reader.read_i64_le())),
+                    'F' => Ok(Float32(self.reader.read_f32_le())),
+                    'D' => Ok(Float64(self.reader.read_f64_le())),
+                    'b' => Ok(VecBool(self.read_vector(|w| w.read_boolean()))),
+                    'i' => Ok(VecInt32(self.read_vector(|w| w.read_i32_le()))),
+                    'l' => Ok(VecInt64(self.read_vector(|w| w.read_i64_le()))),
+                    'f' => Ok(VecFloat32(self.read_vector(|w| w.read_f32_le()))),
+                    'd' => Ok(VecFloat64(self.read_vector(|w| w.read_f64_le()))),
                     'R' => {
                         let bytes_read = self.reader.read_u32_le();
-                        VecRaw(self.reader.read_bytes_exact(bytes_read as usize))
+                        Ok(VecRaw(self.reader.read_bytes_exact(bytes_read as usize)))
                     }
                     'S' => {
                         let bytes_read = self.reader.read_u32_le();
-                        String(self.reader.read_string(bytes_read as usize))
+                        Ok(String(self.reader.read_string(bytes_read as usize)))
                     }
-                    _ => panic!(), // invalid operation
+                    _ => Err(ReadError::UnknownAttributeType(c.to_string())), // invalid operation
                 };
 
-                attributes.push(t);
+                attributes.push(t.unwrap());
             }
 
             let mut children: Vec<Node> = vec![];
@@ -158,11 +160,12 @@ impl BinaryFBX {
         }
 
         let cursor = self.reader.current_cursor() + 1;
-        debug_assert!(cursor % 16 == 0)
+        let validation = if cursor % 16 == 0 { Ok(()) } else { Err(ReadError::InvalidOperation) };
+        validation.unwrap()
     }
 
-    fn read_footer1(&mut self) {
-        let _ = self.reader.read_bytes_exact(16);
+    fn read_footer1(&mut self) -> Vec<u8> {
+        self.reader.read_bytes_exact(16)
     }
 
     fn read_footer2(&mut self) -> Option<usize> {
@@ -187,7 +190,7 @@ impl BinaryFBX {
             }
 
             if i == 3 {
-                panic!(); // invalid byte pattern
+                return Err(ReadError::InvalidFooter2BytePattern).unwrap();
             }
         }
 
@@ -195,22 +198,25 @@ impl BinaryFBX {
     }
 
     fn read_footer3(&mut self) {
-        let mut bytes = self.reader.read_bytes_exact(120);
-        debug_assert!(bytes == FBX_FOOTER_MAGIC_BYTES_3)
+        let bytes = self.reader.read_bytes_exact(120);
+        let validation = if bytes == FBX_FOOTER_MAGIC_BYTES_3 { Ok(()) } else { Err(ReadError::Footer3DoesNotMatch(bytes)) };
+        validation.unwrap()
     }
 
     fn read_footer4(&mut self) {
         let bytes = self.reader.read_bytes_exact(16);
-        debug_assert!(bytes == FBX_FOOTER_MAGIC_BYTES_4);
+        let validation = if bytes == FBX_FOOTER_MAGIC_BYTES_4 { Ok(()) } else { Err(ReadError::Footer4DoesNotMatch(bytes)) };
+        validation.unwrap()
     }
 }
 
-impl BaseFBX for BinaryFBX {
-    fn read(&mut self) {
-        self.version = Some(self.read_version()); // 4 bytes
-        self.children = Some(self.read_nodes());  // unknown bytes
+impl BaseFBXReader for BinaryFBX {
+    fn read(&mut self) -> Result<Object> {
+        let version = (self.read_version()); // 4 bytes
+        self.version = Some(version);
 
-        self.read_footer1(); // 16 bytes
+        let children = (self.read_nodes());  // unknown bytes
+        let footer = self.read_footer1(); // 16 bytes
         self.read_padding(); // 0 - 15 bytes
 
         let correction = self.read_footer2(); // 4 bytes
@@ -222,6 +228,8 @@ impl BaseFBX for BinaryFBX {
 
         self.read_footer3(); // 120 bytes
         self.read_footer4(); // 16 bytes
+
+        Ok(Object::new(version, children, Some(footer)))
     }
 }
 

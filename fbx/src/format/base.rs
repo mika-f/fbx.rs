@@ -2,6 +2,8 @@ use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::mem::transmute;
 
+use crate::error::Result;
+
 #[derive(Debug, Eq, PartialEq, Ord, Clone, Copy)]
 pub struct Version {
     major: u16,
@@ -41,11 +43,26 @@ impl Version {
     }
 }
 
-pub trait BaseFBX: Debug {
-    fn read(&mut self);
+pub trait BaseFBXReader: Debug {
+    fn read(&mut self) -> Result<Object>;
 }
 
+pub trait BaseFBXWriter: Debug {}
+
 pub trait Attribute: Debug {}
+
+#[derive(Debug)]
+pub struct Object {
+    version: Version,
+    children: Vec<Node>,
+    footer: Option<Vec<u8>>,
+}
+
+impl Object {
+    pub fn new(version: Version, children: Vec<Node>, footer: Option<Vec<u8>>) -> Self {
+        Object { version, children, footer }
+    }
+}
 
 #[derive(Debug)]
 pub struct Node {
