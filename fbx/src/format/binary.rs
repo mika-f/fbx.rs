@@ -9,6 +9,23 @@ use crate::format::base::{BaseFBX, Node, Version};
 use crate::format::Type;
 use crate::format::Type::{Bool, Float32, Float64, Int16, Int32, Int64, String, VecBool, VecFloat32, VecFloat64, VecInt32, VecInt64, VecRaw};
 
+const FBX_FOOTER_MAGIC_BYTES_2: [u8; 4] = [
+    0x00, 0x00, 0x00, 0x00
+];
+
+const FBX_FOOTER_MAGIC_BYTES_3: [u8; 120] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+];
+
+const FBX_FOOTER_MAGIC_BYTES_4: [u8; 16] = [
+    0xf8, 0x5a, 0x8c, 0x6a, 0xde, 0xf5, 0xd9, 0x7e, 0xec, 0xe9, 0x0c, 0xe3, 0x75, 0x8f, 0x29, 0x0b
+];
+
 fn times(len: usize) -> impl Iterator {
     std::iter::repeat(()).take(len)
 }
@@ -16,11 +33,12 @@ fn times(len: usize) -> impl Iterator {
 pub struct BinaryFBX {
     reader: BinaryReader,
     version: Option<Version>,
+    children: Option<Vec<Node>>,
 }
 
 impl BinaryFBX {
     pub fn new(reader: BufReader<File>) -> Self {
-        BinaryFBX { reader: BinaryReader::new(Box::new(reader), 23), version: None }
+        BinaryFBX { reader: BinaryReader::new(Box::new(reader), 23), version: None, children: None }
     }
 
     fn is_new_format(&self) -> bool {
@@ -33,13 +51,13 @@ impl BinaryFBX {
         current_version >= boundary_version
     }
 
-    fn read_version(&mut self) {
+    fn read_version(&mut self) -> Version {
         let num = self.reader.read_u32_le();
 
         let major = num / 1000;
         let minor = (num - major * 1000) / 100;
 
-        self.version = Some(Version::from(major as u16, minor as u16))
+        Version::from(major as u16, minor as u16)
     }
 
     fn read_vector<T>(&mut self, reader: impl Fn(&mut BinaryReader) -> T) -> Vec<T> {
@@ -118,25 +136,92 @@ impl BinaryFBX {
                     break;
                 }
 
-                dbg!(cursor);
                 children.extend(self.read_nodes());
             }
 
             vec.push(Node::new(
                 name,
                 attributes,
+                children,
             ))
         }
 
         vec
     }
 
+    fn read_padding(&mut self) {
+        let cursor = self.reader.current_cursor();
+        let remain = (16 - cursor % 16) - 1;
+
+        if remain > 0 {
+            let _ = self.reader.read_bytes_exact(remain);
+        }
+
+        let cursor = self.reader.current_cursor() + 1;
+        debug_assert!(cursor % 16 == 0)
+    }
+
+    fn read_footer1(&mut self) {
+        let _ = self.reader.read_bytes_exact(16);
+    }
+
+    fn read_footer2(&mut self) -> Option<usize> {
+        let bytes = self.reader.read_bytes_exact(4);
+        if bytes == FBX_FOOTER_MAGIC_BYTES_2 {
+            return None;
+        }
+
+        // invalid length of padding bytes
+        // check the position of FBX version bytes that may be included and correct it to the correct position
+        // note: the lower 2 bytes of the version always indicate 0x00.
+        let version: [u8; 4] = self.version.unwrap().to_u8_le();
+        let version: [u8; 2] = [version[0], version[1]];
+        let mut correction: usize = 0;
+
+        for i in 0..3 {
+            let b: [u8; 2] = [bytes[i], bytes[i + 1]];
+
+            if b == version {
+                correction = i;
+                break;
+            }
+
+            if i == 3 {
+                panic!(); // invalid byte pattern
+            }
+        }
+
+        Some(correction)
+    }
+
+    fn read_footer3(&mut self) {
+        let mut bytes = self.reader.read_bytes_exact(120);
+        debug_assert!(bytes == FBX_FOOTER_MAGIC_BYTES_3)
+    }
+
+    fn read_footer4(&mut self) {
+        let bytes = self.reader.read_bytes_exact(16);
+        debug_assert!(bytes == FBX_FOOTER_MAGIC_BYTES_4);
+    }
 }
 
 impl BaseFBX for BinaryFBX {
     fn read(&mut self) {
-        self.read_version(); // 4 bytes
-        self.read_nodes();   // unknown bytes
+        self.version = Some(self.read_version()); // 4 bytes
+        self.children = Some(self.read_nodes());  // unknown bytes
+
+        self.read_footer1(); // 16 bytes
+        self.read_padding(); // 0 - 15 bytes
+
+        let correction = self.read_footer2(); // 4 bytes
+        if correction.is_none() {
+            self.read_version(); // 4 bytes
+        } else {
+            let _ = self.reader.read_bytes_exact(correction.unwrap());
+        }
+
+        self.read_footer3(); // 120 bytes
+        self.read_footer4(); // 16 bytes
     }
 }
 
@@ -144,6 +229,7 @@ impl Debug for BinaryFBX {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BinaryFBX")
             .field("version", &self.version)
+            .field("children", &self.children)
             .finish()
     }
 }

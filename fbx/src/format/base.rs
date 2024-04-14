@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::fmt::Debug;
+use std::mem::transmute;
 
 #[derive(Debug, Eq, PartialEq, Ord, Clone, Copy)]
 pub struct Version {
@@ -33,6 +34,11 @@ impl Version {
     pub fn from(major: u16, minor: u16) -> Self {
         Version { major, minor }
     }
+
+    pub fn to_u8_le(self) -> [u8; 4] {
+        let version: u32 = ((self.major as u32) * 1000) + ((self.minor as u32) * 100);
+        unsafe { transmute::<u32, [u8; 4]>(version.to_le()) }
+    }
 }
 
 pub trait BaseFBX: Debug {
@@ -45,11 +51,12 @@ pub trait Attribute: Debug {}
 pub struct Node {
     name: String,
     attributes: Vec<Type>,
+    children: Vec<Node>,
 }
 
 impl Node {
-    pub fn new(name: String, attributes: Vec<Type>) -> Self {
-        Node { name, attributes }
+    pub fn new(name: String, attributes: Vec<Type>, children: Vec<Node>) -> Self {
+        Node { name, attributes, children }
     }
 }
 
