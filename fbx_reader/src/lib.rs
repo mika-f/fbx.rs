@@ -33,6 +33,10 @@ impl FBXNodeReader {
         FBXNodeReader { node }
     }
 
+    pub fn get_nodes(&self, name: &str) -> Vec<FBXNodeReader> {
+        self.node.children().iter().map(|w| FBXNodeReader::from(w.clone())).collect()
+    }
+
     pub fn get_node(&self, name: &str) -> Option<FBXNodeReader> {
         for x in self.node.children().iter() {
             if x.name() == name {
