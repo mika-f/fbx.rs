@@ -62,9 +62,17 @@ impl Object {
     pub fn new(version: Version, children: Vec<Node>, footer: Option<Vec<u8>>) -> Self {
         Object { version, children, footer }
     }
+
+    pub fn version(self) -> Version {
+        self.version
+    }
+
+    pub fn children(&self) -> Vec<Node> {
+        self.children.clone()
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Node {
     name: String,
     attributes: Vec<Type>,
@@ -75,9 +83,22 @@ impl Node {
     pub fn new(name: String, attributes: Vec<Type>, children: Vec<Node>) -> Self {
         Node { name, attributes, children }
     }
+
+    pub fn name(&self) -> String {
+        self.name.to_owned()
+    }
+
+    pub fn attributes(&self) -> Vec<Type> {
+        return self.attributes.clone();
+    }
+
+    pub fn children(&self) -> Vec<Node> {
+        return self.children.clone();
+    }
 }
 
-#[derive(Debug)]
+
+#[derive(Debug, Clone)]
 pub enum Type {
     Bool(bool),
     Int16(i16),
@@ -92,4 +113,90 @@ pub enum Type {
     VecFloat64(Vec<f64>),
     VecRaw(Vec<u8>),
     String(String),
+}
+
+impl Type {
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Type::Bool(b) => Some(b.to_owned()),
+            _ => None
+        }
+    }
+
+    pub fn as_int16(&self) -> Option<i16> {
+        match self {
+            Type::Int16(i) => Some(i.to_owned()),
+            _ => None
+        }
+    }
+
+    pub fn as_int32(&self) -> Option<i32> {
+        match self {
+            Type::Int32(i) => Some(i.to_owned()),
+            _ => None
+        }
+    }
+
+    pub fn as_int64(&self) -> Option<i64> {
+        match self {
+            Type::Int64(i) => Some(i.to_owned()),
+            _ => None
+        }
+    }
+
+    pub fn as_float(&self) -> Option<f32> {
+        match self {
+            Type::Float32(f) => Some(f.to_owned()),
+            _ => None
+        }
+    }
+
+    pub fn as_double(&self) -> Option<f64> {
+        match self {
+            Type::Float64(f) => Some(f.to_owned()),
+            _ => None
+        }
+    }
+
+    pub fn as_int32_array(&self) -> Option<Vec<i32>> {
+        match self {
+            Type::VecInt32(i) => Some(i.to_owned()),
+            _ => None
+        }
+    }
+
+    pub fn as_int64_array(&self) -> Option<Vec<i64>> {
+        match self {
+            Type::VecInt64(i) => Some(i.to_owned()),
+            _ => None
+        }
+    }
+
+    pub fn as_float_array(&self) -> Option<Vec<f32>> {
+        match self {
+            Type::VecFloat32(f) => Some(f.to_owned()),
+            _ => None
+        }
+    }
+
+    pub fn as_double_array(&self) -> Option<Vec<f64>> {
+        match self {
+            Type::VecFloat64(f) => Some(f.to_owned()),
+            _ => None
+        }
+    }
+
+    pub fn as_binary(&self) -> Option<Vec<u8>> {
+        match self {
+            Type::VecRaw(b) => Some(b.to_owned()),
+            _ => None
+        }
+    }
+
+    pub fn as_str(&self) -> Option<String> {
+        match self {
+            Type::String(s) => Some(s.to_owned()),
+            _ => None
+        }
+    }
 }
